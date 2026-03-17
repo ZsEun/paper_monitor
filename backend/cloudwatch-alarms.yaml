@@ -1,0 +1,233 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudWatch Alarms for Interest Definition Chatbot
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: Deployment environment
+  
+  AlarmEmail:
+    Type: String
+    Description: Email address for alarm notifications
+    Default: ''
+  
+  AlarmSNSTopicArn:
+    Type: String
+    Description: Optional existing SNS topic ARN for alarm notifications
+    Default: ''
+
+Conditions:
+  CreateSNSTopic: !Equals [!Ref AlarmSNSTopicArn, '']
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+
+Resources:
+  # SNS Topic for alarm notifications (created only if not provided)
+  ChatbotAlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateSNSTopic
+    Properties:
+      TopicName: !Sub 'literature-boot-chatbot-alarms-${Environment}'
+      DisplayName: Literature Boot Chatbot Alarms
+      Subscription:
+        - !If
+          - HasAlarmEmail
+          - Endpoint: !Ref AlarmEmail
+            Protocol: email
+          - !Ref AWS::NoValue
+
+  # Alarm 1: High Response Time (p95 > 7 seconds)
+  HighResponseTimeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'LiteratureBoot-Chatbot-HighResponseTime-${Environment}'
+      AlarmDescription: 'Alert when chatbot response time p95 exceeds 7 seconds'
+      MetricName: ChatbotResponseTime
+      Namespace: LiteratureBoot/Chatbot
+      ExtendedStatistic: p95
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
+      Threshold: 7000  # 7 seconds in milliseconds
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Environment
+          Value: !Ref Environment
+        - Name: Service
+          Value: InterestDefinitionChatbot
+        - Name: Operation
+          Value: ChatbotResponse
+        - Name: Status
+          Value: Success
+      AlarmActions:
+        - !If
+          - CreateSNSTopic
+          - !Ref ChatbotAlarmTopic
+          - !Ref AlarmSNSTopicArn
+      TreatMissingData: notBreaching
+
+  # Alarm 2: High Error Rate (> 10%)
+  HighErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'LiteratureBoot-Chatbot-HighErrorRate-${Environment}'
+      AlarmDescription: 'Alert when chatbot error rate exceeds 10%'
+      Metrics:
+        - Id: success
+          MetricStat:
+            Metric:
+              Namespace: LiteratureBoot/Chatbot
+              MetricName: ChatbotSuccess
+              Dimensions:
+                - Name: Environment
+                  Value: !Ref Environment
+                - Name: Service
+                  Value: InterestDefinitionChatbot
+                - Name: Operation
+                  Value: ChatbotResponse
+            Period: 300  # 5 minutes
+            Stat: Sum
+          ReturnData: false
+        
+        - Id: failure
+          MetricStat:
+            Metric:
+              Namespace: LiteratureBoot/Chatbot
+              MetricName: ChatbotFailure
+              Dimensions:
+                - Name: Environment
+                  Value: !Ref Environment
+                - Name: Service
+                  Value: InterestDefinitionChatbot
+                - Name: Operation
+                  Value: ChatbotResponse
+            Period: 300  # 5 minutes
+            Stat: Sum
+          ReturnData: false
+        
+        - Id: error_rate
+          Expression: '(failure / (success + failure)) * 100'
+          Label: 'Error Rate Percentage'
+          ReturnData: true
+      
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
+      Threshold: 10  # 10%
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !If
+          - CreateSNSTopic
+          - !Ref ChatbotAlarmTopic
+          - !Ref AlarmSNSTopicArn
+      TreatMissingData: notBreaching
+
+  # Alarm 3: Description Generation Failure Rate (> 10%)
+  DescriptionGenerationFailureRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'LiteratureBoot-Chatbot-DescriptionGenerationFailureRate-${Environment}'
+      AlarmDescription: 'Alert when description generation failure rate exceeds 10%'
+      Metrics:
+        - Id: success
+          MetricStat:
+            Metric:
+              Namespace: LiteratureBoot/Chatbot
+              MetricName: DescriptionGenerationSuccess
+              Dimensions:
+                - Name: Environment
+                  Value: !Ref Environment
+                - Name: Service
+                  Value: InterestDefinitionChatbot
+                - Name: Operation
+                  Value: DescriptionGeneration
+            Period: 300  # 5 minutes
+            Stat: Sum
+          ReturnData: false
+        
+        - Id: failure
+          MetricStat:
+            Metric:
+              Namespace: LiteratureBoot/Chatbot
+              MetricName: DescriptionGenerationFailure
+              Dimensions:
+                - Name: Environment
+                  Value: !Ref Environment
+                - Name: Service
+                  Value: InterestDefinitionChatbot
+                - Name: Operation
+                  Value: DescriptionGeneration
+            Period: 300  # 5 minutes
+            Stat: Sum
+          ReturnData: false
+        
+        - Id: failure_rate
+          Expression: '(failure / (success + failure)) * 100'
+          Label: 'Description Generation Failure Rate Percentage'
+          ReturnData: true
+      
+      EvaluationPeriods: 3
+      DatapointsToAlarm: 2
+      Threshold: 10  # 10%
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !If
+          - CreateSNSTopic
+          - !Ref ChatbotAlarmTopic
+          - !Ref AlarmSNSTopicArn
+      TreatMissingData: notBreaching
+
+  # Alarm 4: Bedrock API Error Spike (> 50 errors in 5 minutes)
+  BedrockAPIErrorSpikeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'LiteratureBoot-Chatbot-BedrockAPIErrorSpike-${Environment}'
+      AlarmDescription: 'Alert when Bedrock API errors exceed 50 in 5 minutes'
+      MetricName: BedrockAPIError
+      Namespace: LiteratureBoot/Chatbot
+      Statistic: Sum
+      Period: 300  # 5 minutes
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Environment
+          Value: !Ref Environment
+        - Name: Service
+          Value: InterestDefinitionChatbot
+      AlarmActions:
+        - !If
+          - CreateSNSTopic
+          - !Ref ChatbotAlarmTopic
+          - !Ref AlarmSNSTopicArn
+      TreatMissingData: notBreaching
+
+Outputs:
+  SNSTopicArn:
+    Description: SNS Topic ARN for alarm notifications
+    Value: !If
+      - CreateSNSTopic
+      - !Ref ChatbotAlarmTopic
+      - !Ref AlarmSNSTopicArn
+    Export:
+      Name: !Sub '${AWS::StackName}-AlarmTopicArn'
+  
+  HighResponseTimeAlarmArn:
+    Description: ARN of the High Response Time alarm
+    Value: !GetAtt HighResponseTimeAlarm.Arn
+  
+  HighErrorRateAlarmArn:
+    Description: ARN of the High Error Rate alarm
+    Value: !GetAtt HighErrorRateAlarm.Arn
+  
+  DescriptionGenerationFailureRateAlarmArn:
+    Description: ARN of the Description Generation Failure Rate alarm
+    Value: !GetAtt DescriptionGenerationFailureRateAlarm.Arn
+  
+  BedrockAPIErrorSpikeAlarmArn:
+    Description: ARN of the Bedrock API Error Spike alarm
+    Value: !GetAtt BedrockAPIErrorSpikeAlarm.Arn
