@@ -126,6 +126,31 @@ class JournalMonitorStack(Stack):
             ],
         )
 
+        # --- Lambda Layer for Python dependencies ---
+        # Pre-built with: pip3 install -r requirements.txt --platform manylinux2014_x86_64
+        #   --target lambda_layer/python --only-binary=:all: --python-version 3.11
+        deps_layer = _lambda.LayerVersion(
+            self, "DepsLayer",
+            code=_lambda.Code.from_asset("../backend/lambda_layer"),
+            compatible_runtimes=[_lambda.Runtime.PYTHON_3_11],
+            description="Python dependencies for Academic Journal Monitor",
+        )
+
+        # Backend code asset (exclude non-essential files)
+        backend_code = _lambda.Code.from_asset(
+            "../backend",
+            exclude=[
+                "lambda_layer",
+                "lambda_deps",
+                "data",
+                "__pycache__",
+                "*.pyc",
+                ".pytest_cache",
+                "venv",
+                ".venv",
+            ],
+        )
+
         # --- Task 8.4: API Lambda function and API Gateway ---
         cors_origins = cdk.Fn.join("", ["https://", distribution.distribution_domain_name])
 
@@ -133,7 +158,8 @@ class JournalMonitorStack(Stack):
             self, "ApiLambda",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="lambda_handler.handler",
-            code=_lambda.Code.from_asset("../backend"),
+            code=backend_code,
+            layers=[deps_layer],
             memory_size=512,
             timeout=Duration.seconds(60),
             environment={
@@ -182,7 +208,8 @@ class JournalMonitorStack(Stack):
             self, "ScraperLambda",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="scraper_handler.handler",
-            code=_lambda.Code.from_asset("../backend"),
+            code=backend_code,
+            layers=[deps_layer],
             memory_size=512,
             timeout=Duration.seconds(300),
             environment={
