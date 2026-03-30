@@ -50,6 +50,11 @@ export const journalsAPI = {
     return response.data;
   },
   
+  update: async (id: string, journal: { name: string; platform: string; url: string }): Promise<Journal> => {
+    const response = await api.put(`/journals/${id}`, journal);
+    return response.data;
+  },
+
   delete: async (id: string) => {
     const response = await api.delete(`/journals/${id}`);
     return response.data;

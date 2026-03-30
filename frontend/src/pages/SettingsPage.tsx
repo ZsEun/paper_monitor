@@ -20,7 +20,8 @@ import {
   DialogActions,
   Chip,
 } from '@mui/material';
-import { ArrowBack, Delete, Edit, Add, FileDownload, FileUpload, Chat, CheckCircle, RadioButtonUnchecked, HourglassEmpty } from '@mui/icons-material';
+import { ArrowBack, Delete, Edit, Add, FileDownload, FileUpload, Chat, CheckCircle, RadioButtonUnchecked, HourglassEmpty, Visibility } from '@mui/icons-material';
+import Tooltip from '@mui/material/Tooltip';
 import { useNavigate } from 'react-router-dom';
 import { interestTopicsAPI } from '../services/api';
 import { InterestTopic } from '../types';
@@ -55,6 +56,9 @@ const SettingsPage: React.FC = () => {
   const [chatbotOpen, setChatbotOpen] = useState(false);
   const [activeChatbotTopicId, setActiveChatbotTopicId] = useState<string | null>(null);
   const [activeChatbotTopicText, setActiveChatbotTopicText] = useState<string>('');
+
+  // View details state
+  const [viewDetailsTopic, setViewDetailsTopic] = useState<InterestTopic | null>(null);
 
   // Chatbot handlers
   const handleOpenChatbot = (topic: InterestTopic) => {
@@ -407,35 +411,45 @@ const SettingsPage: React.FC = () => {
                       {saving && <CircularProgress size={20} sx={{ mr: 1 }} />}
                     </Box>
                   ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<Chat />}
-                        onClick={() => handleOpenChatbot(topic)}
-                        disabled={editingTopicId !== null}
-                        sx={{ mr: 1 }}
-                        aria-label={`${getChatbotButtonText(topic)} AI conversation for ${topic.topicText}`}
-                      >
-                        {getChatbotButtonText(topic)}
-                      </Button>
-                      <IconButton 
-                        edge="end" 
-                        sx={{ mr: 1 }}
-                        onClick={() => handleStartEdit(topic)}
-                        disabled={editingTopicId !== null}
-                        aria-label={`Edit topic ${topic.topicText}`}
-                      >
-                        <Edit />
-                      </IconButton>
-                      <IconButton 
-                        edge="end"
-                        onClick={() => handleDeleteClick(topic)}
-                        disabled={editingTopicId !== null}
-                        aria-label={`Delete topic ${topic.topicText}`}
-                      >
-                        <Delete />
-                      </IconButton>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {topic.comprehensiveDescription && (
+                        <Tooltip title="View details">
+                          <IconButton
+                            onClick={() => setViewDetailsTopic(topic)}
+                            disabled={editingTopicId !== null}
+                            aria-label={`View details for ${topic.topicText}`}
+                          >
+                            <Visibility />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title={`${getChatbotButtonText(topic)} AI conversation`}>
+                        <IconButton
+                          onClick={() => handleOpenChatbot(topic)}
+                          disabled={editingTopicId !== null}
+                          aria-label={`${getChatbotButtonText(topic)} AI conversation for ${topic.topicText}`}
+                        >
+                          <Chat />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit topic">
+                        <IconButton
+                          onClick={() => handleStartEdit(topic)}
+                          disabled={editingTopicId !== null}
+                          aria-label={`Edit topic ${topic.topicText}`}
+                        >
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete topic">
+                        <IconButton
+                          onClick={() => handleDeleteClick(topic)}
+                          disabled={editingTopicId !== null}
+                          aria-label={`Delete topic ${topic.topicText}`}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
                   )
                 }
@@ -578,6 +592,51 @@ const SettingsPage: React.FC = () => {
             onDescriptionSaved={handleDescriptionSaved}
             onCancel={handleCloseChatbot}
           />
+        )}
+      </Dialog>
+
+      {/* View Details dialog */}
+      <Dialog
+        open={!!viewDetailsTopic}
+        onClose={() => setViewDetailsTopic(null)}
+        maxWidth="md"
+        fullWidth
+        aria-labelledby="view-details-dialog-title"
+      >
+        {viewDetailsTopic && (
+          <>
+            <DialogTitle id="view-details-dialog-title">
+              {viewDetailsTopic.topicText}
+            </DialogTitle>
+            <DialogContent>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Comprehensive Description
+              </Typography>
+              <Paper variant="outlined" sx={{ p: 2, whiteSpace: 'pre-wrap', bgcolor: 'grey.50' }}>
+                <Typography variant="body2">
+                  {viewDetailsTopic.comprehensiveDescription}
+                </Typography>
+              </Paper>
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Created: {new Date(viewDetailsTopic.createdAt).toLocaleString()} · Updated: {new Date(viewDetailsTopic.updatedAt).toLocaleString()}
+                </Typography>
+              </Box>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setViewDetailsTopic(null)}>Close</Button>
+              <Button
+                variant="outlined"
+                startIcon={<Chat />}
+                onClick={() => {
+                  setViewDetailsTopic(null);
+                  handleOpenChatbot(viewDetailsTopic);
+                }}
+              >
+                Edit with AI
+              </Button>
+            </DialogActions>
+          </>
         )}
       </Dialog>
     </Container>
